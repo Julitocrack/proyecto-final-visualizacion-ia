@@ -167,6 +167,7 @@ def veredicto_card(pct, n, etiquetas, textos, borde_color):
 
 # ─── 3. APP LAYOUT ────────────────────────────────────────────────────────────
 app = dash.Dash(__name__)
+server = app.server  # necesario para gunicorn en Render
 app.title = 'Premier League · ¿Vale la Pena Apostar al Over de Córners en Vivo?'
 
 app.layout = html.Div(
