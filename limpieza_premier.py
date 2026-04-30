@@ -26,11 +26,11 @@ columnas_clave = ['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'HTHG', 'HTAG'
 df_filtrado = df_premier[columnas_clave].dropna()
 
 # 4. El "Filtro Táctico": Identificar al Favorito perdiendo al Medio Tiempo
-# CASO A: Local es amplio favorito (momio < 1.80) y va perdiendo al medio tiempo
-filtro_local_sufriendo = (df_filtrado['B365H'] < 1.80) & (df_filtrado['HTHG'] < df_filtrado['HTAG'])
+# CASO A: Local es súper favorito (momio < 1.50) y va perdiendo al medio tiempo
+filtro_local_sufriendo = (df_filtrado['B365H'] < 1.50) & (df_filtrado['HTHG'] < df_filtrado['HTAG'])
 
-# CASO B: Visitante es amplio favorito (momio < 1.80) y va perdiendo al medio tiempo
-filtro_visita_sufriendo = (df_filtrado['B365A'] < 1.80) & (df_filtrado['HTAG'] < df_filtrado['HTHG'])
+# CASO B: Visitante es súper favorito (momio < 1.50) y va perdiendo al medio tiempo
+filtro_visita_sufriendo = (df_filtrado['B365A'] < 1.50) & (df_filtrado['HTAG'] < df_filtrado['HTHG'])
 
 # Unimos ambos escenarios tácticos
 df_favoritos_perdiendo_mt = df_filtrado[filtro_local_sufriendo | filtro_visita_sufriendo]
