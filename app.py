@@ -11,9 +11,30 @@ scenarios = pd.read_csv('data/premier_limpio.csv', encoding='utf-8-sig')
 scenarios = scenarios.rename(columns={'Equipo_Perdiendo': 'Equipo_Perd',
                                       'Goles_Perd_Final': 'Goles_Perd'})
 
-# Dataset completo para comparaciones (normal vs perdiendo)
-df = pd.read_csv('data/premier_limpio.csv', encoding='utf-8-sig')
-df['Total_Corners'] = df['HC'] + df['AC']
+# Dataset completo (todos los partidos de las 4 temporadas) para comparaciones
+_ARCHIVOS_RAW = [
+    'data/2021-2022.csv',
+    'data/2022-2023.csv',
+    'data/premierleague2023-2024.csv',
+    'data/premierleague2024-2025.csv',
+]
+_dfs_raw = []
+for _f in _ARCHIVOS_RAW:
+    _tmp = pd.read_csv(_f, encoding='utf-8-sig')
+    _dfs_raw.append(_tmp)
+df_all = pd.concat(_dfs_raw, ignore_index=True)
+df_all = df_all.drop_duplicates(subset=['Date', 'HomeTeam', 'AwayTeam']).reset_index(drop=True)
+df_all = df_all[['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'HTHG', 'HTAG', 'HC', 'AC']].dropna()
+for _c in ['FTHG', 'FTAG', 'HTHG', 'HTAG', 'HC', 'AC']:
+    df_all[_c] = pd.to_numeric(df_all[_c], errors='coerce')
+df_all = df_all.dropna().reset_index(drop=True)
+df_all['Total_Corners'] = df_all['HC'] + df_all['AC']
+
+# Partidos donde nadie iba perdiendo al descanso (empate en el MT)
+df_resto = df_all[df_all['HTHG'] == df_all['HTAG']].copy()
+
+# Alias para compatibilidad
+df = df_all.copy()
 
 LINEA_CORNERS = 9.5
 MIN_MUESTRAS  = 8
@@ -189,12 +210,8 @@ app.layout = html.Div(
 
         # SECCIÓN 0: KPIs + INTRO
         narrativa(
-            'Son las 9:47 de la noche. El equipo que todos esperaban que ganara llega al descanso perdiendo. '
-            'En la app de apuestas, la línea de córners totales del partido sigue abierta. La pregunta es simple: '
-            '¿tiene sentido apostar al over en este momento, o la intuición de que "van a presionar más" no se sostiene con datos?',
-            'Para responderla, se analizaron 4 temporadas completas de la Premier League (2021-22 a 2024-25), '
-            'identificando todos los partidos donde un equipo terminó el primer tiempo perdiendo en el marcador. '
-            'En total, 690 escenarios de presión. Lo que encontramos no es lo que la mayoría esperaría.'
+            'El equipo favorito llega al descanso perdiendo. La línea de córners sigue abierta. '
+            '¿Tiene sentido apostar al over? Se analizaron 690 escenarios en 4 temporadas de la Premier League para responderlo.'
         ),
         html.Div(id='kpis-section', style={'marginBottom': '48px'}),
 
@@ -203,14 +220,9 @@ app.layout = html.Div(
             seccion_titulo('📐', 'Over de Córners Totales (ambos equipos) · Veredicto de Apuesta',
                            f'Córners totales del partido (local + visitante) cuando el equipo va perdiendo al descanso'),
             narrativa(
-                'La primera evidencia apunta en una dirección clara: cuando un equipo va perdiendo al descanso, '
-                'los partidos tienden a terminar con más córners de lo habitual. El equipo que va abajo busca '
-                'el empate lanzando centros y generando situaciones de balón parado, mientras el rival defiende '
-                'y despeja hacia afuera, produciendo más saques de esquina para el equipo que ataca.',
-                f'El termómetro muestra el porcentaje histórico de partidos que superaron los {LINEA_CORNERS} córners '
-                'totales en este escenario exacto. El histograma inferior deja ver dónde se concentran los partidos: '
-                'si la barra roja (perdiendo al MT) se desplaza hacia la derecha respecto a la verde, '
-                'el patrón de mayor presión es real y consistente.'
+                f'El termómetro muestra qué tan seguido el partido supera los {LINEA_CORNERS} córners totales '
+                'cuando el equipo va perdiendo al descanso. El histograma confirma si los partidos en ese escenario '
+                'realmente generan más córners que el resto.'
             ),
             html.Div([
                 dcc.Graph(id='grafica-termometro-corners', config={'displayModeBar': False},
@@ -228,14 +240,8 @@ app.layout = html.Div(
             seccion_titulo('🌡️', 'Contexto Táctico: ¿Realmente Presionan para Remontar?',
                            '¿Con qué frecuencia logra el equipo cambiar el resultado cuando va perdiendo al descanso?'),
             narrativa(
-                'Antes de apostar al over de córners, vale la pena entender qué motiva esa presión. '
-                'Un equipo que va perdiendo al descanso tiene dos mitades muy distintas: la primera, donde '
-                'algo salió mal, y la segunda, donde el entrenador ajusta y el equipo busca revertirlo. '
-                'Esa búsqueda se traduce en más posesión en campo rival, más centros y, en consecuencia, más córners.',
-                'Sin embargo, la tasa de remontada revela algo importante: presionar más no garantiza ganar. '
-                'La mayoría de los equipos que van perdiendo al MT logran igualar o remontar en menos ocasiones '
-                'de las que el instinto deportivo haría pensar. Esto explica por qué la presión se sostiene '
-                'durante todo el segundo tiempo: el marcador sigue siendo adverso.'
+                'El equipo busca revertir el marcador en el segundo tiempo, pero ¿con qué frecuencia lo logra? '
+                'La tasa de remontada explica por qué la presión se mantiene durante todo el partido.'
             ),
             html.Div([
                 dcc.Graph(id='grafica-termometro', config={'displayModeBar': False},
@@ -251,13 +257,8 @@ app.layout = html.Div(
             seccion_titulo('🎯', 'La Presión en Números: Tiros a Puerta',
                            'Intensidad ofensiva del equipo según su situación al descanso'),
             narrativa(
-                'Los tiros a puerta son la medida más directa de la intención ofensiva. Si la hipótesis '
-                'de "presionan más cuando van perdiendo" es correcta, deberíamos ver un aumento claro en '
-                'el número de disparos al arco durante los partidos donde el equipo va abajo al descanso.',
-                'La comparación entre los tres grupos —el equipo perdiendo, su rival en ese mismo escenario, '
-                'y el promedio del equipo en el resto de sus partidos— muestra si el incremento ofensivo '
-                'es real o solo una percepción. Un delta positivo confirma que el equipo efectivamente '
-                'intensifica su juego ofensivo cuando el marcador lo exige.'
+                '¿Realmente disparan más cuando van perdiendo? La comparación entre el equipo, su rival '
+                'en ese escenario y sus partidos normales muestra si la presión ofensiva es real o solo percepción.'
             ),
             dcc.Graph(id='grafica-tiros', config={'displayModeBar': False}, style={'height': '420px'}),
         ], style={'marginBottom': '48px'}),
@@ -267,13 +268,8 @@ app.layout = html.Div(
             seccion_titulo('📐', 'Córners Propios: ¿Se Generan Más Saques de Esquina?',
                            'Córners propios del equipo que va perdiendo — no incluye los del rival'),
             narrativa(
-                'Los córners propios son una consecuencia directa de la presión ofensiva: '
-                'el equipo que ataca manda el balón hacia el área, el defensa lo desvía por la línea de fondo '
-                'y se genera un córner. Cuanto más tiempo pasa un equipo atacando, más córners acumula.',
-                'Esta gráfica aísla únicamente los córners del equipo que va perdiendo, separando su '
-                'contribución del total del partido. Si la diferencia respecto a sus partidos normales '
-                'es significativa, queda confirmado que no solo el total de córners sube, sino que '
-                'es el propio equipo presionado quien los genera activamente.'
+                'Aislando solo los córners del equipo que va perdiendo, vemos si es ese equipo '
+                'quien impulsa el aumento del total — o si el incremento viene del rival.'
             ),
             dcc.Graph(id='grafica-corners', config={'displayModeBar': False}, style={'height': '380px'}),
         ], style={'marginBottom': '48px'}),
@@ -283,14 +279,8 @@ app.layout = html.Div(
             seccion_titulo('🏆', '¿Qué Pasa al Final del Partido?',
                            'Distribución de resultados finales cuando el equipo va perdiendo al descanso'),
             narrativa(
-                'Toda esa presión, esos córners y esos tiros adicionales, ¿se convierten en puntos? '
-                'La gráfica de anillo muestra la proporción real de remontadas, empates y derrotas. '
-                'El hallazgo es el núcleo de toda la historia: la presión genera córners, '
-                'pero los córners no garantizan el gol.',
-                'Las barras por temporada permiten verificar si este patrón es estable o si fue '
-                'un fenómeno particular de una sola temporada. La consistencia entre los cuatro años '
-                'es la prueba más sólida de que estamos ante un comportamiento estructural del '
-                'fútbol inglés, no ante una anomalía estadística.'
+                'Toda esa presión, ¿se convierte en puntos? Las barras por temporada muestran '
+                'si el patrón es consistente o fue una anomalía de un año en particular.'
             ),
             html.Div([
                 dcc.Graph(id='grafica-anillo', config={'displayModeBar': False},
@@ -305,15 +295,8 @@ app.layout = html.Div(
             seccion_titulo('📊', 'El Límite de la Presión: Córners vs. Goles',
                            'Relación entre los córners propios generados y los goles anotados al final'),
             narrativa(
-                'La última pieza del rompecabezas: si los córners son el indicador de presión, '
-                '¿cuántos de esos córners terminan en gol? El scatter plot enfrenta ambas variables '
-                'y revela si existe una correlación entre presionar más —medido en córners propios— '
-                'y convertir ese esfuerzo en goles.',
-                'Los colores indican el resultado final del partido: verde para remontada, '
-                'amarillo para empate y rojo para derrota. Si los puntos verdes se concentran '
-                'en la parte superior derecha (muchos córners y muchos goles), la presión sí se '
-                'traduce en efectividad. Si están dispersos sin patrón claro, la conclusión es que '
-                'generar córners es condición necesaria, pero no suficiente, para cambiar el resultado.'
+                'Más córners no siempre significa más goles. El color de cada punto indica '
+                'el resultado final: ¿los que más presionan son los que terminan remontando?'
             ),
             dcc.Graph(id='grafica-scatter', config={'displayModeBar': False}, style={'height': '420px'}),
         ], style={'marginBottom': '48px'}),
@@ -378,25 +361,12 @@ def actualizar_todo(equipo):
     sc = scenarios[scenarios['Equipo_Perd'] == equipo] if equipo else scenarios
     n  = len(sc)
 
-    # Todos los partidos del equipo (para comparación normal vs perdiendo)
+    # Promedios de referencia — todos los escenarios (global) como base de comparación
+    normal_tiros_mean   = round(scenarios['Tiros_Perd'].mean(), 2)
+    normal_corners_mean = round(scenarios['Corners_Perd'].mean(), 2)
     if equipo:
-        todos = df[(df['HomeTeam'] == equipo) | (df['AwayTeam'] == equipo)]
-        # Partidos donde el equipo NO va perdiendo al MT
-        sc_ids   = sc.index
-        no_perd_corners = df.loc[~df.index.isin(sc_ids), 'Total_Corners']
-        # Tiros propios del equipo cuando NO va perdiendo (local o visitante)
-        def tiros_propios(row, eq):
-            return row['HST'] if row['HomeTeam'] == eq else row['AST']
-        def corners_propios(row, eq):
-            return row['HC'] if row['HomeTeam'] == eq else row['AC']
-        todos_tiros   = todos.apply(lambda r: tiros_propios(r, equipo), axis=1)
-        todos_corners = todos.apply(lambda r: corners_propios(r, equipo), axis=1)
-        normal_tiros_mean   = round(todos_tiros.mean(), 2)
-        normal_corners_mean = round(todos_corners.mean(), 2)
-    else:
-        no_perd_corners     = df['Total_Corners']
-        normal_tiros_mean   = round(df['HST'].mean() / 2 + df['AST'].mean() / 2, 2)
-        normal_corners_mean = round(df['HC'].mean() / 2 + df['AC'].mean() / 2, 2)
+        normal_tiros_mean   = round(scenarios[scenarios['Equipo_Perd'] != equipo]['Tiros_Perd'].mean(), 2)
+        normal_corners_mean = round(scenarios[scenarios['Equipo_Perd'] != equipo]['Corners_Perd'].mean(), 2)
 
     # ── KPIs ──────────────────────────────────────────────────────────────────
     n_remontadas  = (sc['Resultado_Final'] == 'Remontada (G)').sum()
@@ -475,18 +445,12 @@ def actualizar_todo(equipo):
         xbins=dict(start=0, end=28, size=1),
         hovertemplate='%{x} córners totales: %{y} partidos<extra>Perdiendo al MT</extra>',
     ))
-    fig_dist.add_trace(go.Histogram(
-        x=no_perd_corners, name='Resto de partidos',
-        marker_color=VERDE_ACENTO, opacity=0.45,
-        xbins=dict(start=0, end=28, size=1),
-        hovertemplate='%{x} córners totales: %{y} partidos<extra>Resto</extra>',
-    ))
     fig_dist.add_vline(x=LINEA_CORNERS, line_dash='dash', line_color=AMARILLO, line_width=2,
                        annotation_text=f'Línea {LINEA_CORNERS}', annotation_font_color=AMARILLO,
                        annotation_font_size=12)
     fig_dist.update_layout(
         **{**LAYOUT_BASE, 'legend': {**LEGEND_BASE, 'orientation': 'h', 'y': -0.18, 'x': 0.5, 'xanchor': 'center'}},
-        title=dict(text='Distribución de córners totales (local + visitante) · Perdiendo al MT vs. resto de partidos',
+        title=dict(text='Distribución de córners totales (local + visitante) · partidos perdiendo al MT',
                    font=dict(size=15, color=TEXTO), x=0),
         barmode='overlay', xaxis_title='Córners totales en el partido (local + visitante)',
         yaxis_title='Nº de partidos', bargap=0.05,
