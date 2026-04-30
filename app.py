@@ -4,77 +4,20 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# ─── 1. CARGAR Y PROCESAR DATOS ───────────────────────────────────────────────
-ARCHIVOS_CSV = [
-    'data/2021-2022.csv',
-    'data/2022-2023.csv',
-    'data/premierleague2023-2024.csv',
-    'data/premierleague2024-2025.csv',
-]
+# ─── 1. CARGAR DATOS ──────────────────────────────────────────────────────────
+# El script limpieza_premier.py ya realizó toda la limpieza y transformación.
+# Aquí solo cargamos el resultado.
+scenarios = pd.read_csv('data/premier_limpio.csv', encoding='utf-8-sig')
+scenarios = scenarios.rename(columns={'Equipo_Perdiendo': 'Equipo_Perd',
+                                      'Goles_Perd_Final': 'Goles_Perd'})
 
-_dfs = []
-for _f in ARCHIVOS_CSV:
-    try:
-        _tmp = pd.read_csv(_f, encoding='utf-8-sig')
-        _tmp['Temporada'] = _f.split('/')[-1].replace('premierleague', '').replace('.csv', '')
-        _dfs.append(_tmp)
-        print(f"✅ Cargado {_f}: {len(_tmp) - 1} partidos")
-    except FileNotFoundError:
-        print(f"⚠️  No se encontró {_f}, se omite")
-
-if not _dfs:
-    raise FileNotFoundError("No se encontró ningún CSV.")
-
-df = pd.concat(_dfs, ignore_index=True)
-print(f"📊 Total antes de deduplicar: {len(df)}")
-
-df = df.drop_duplicates(subset=['Date', 'HomeTeam', 'AwayTeam']).reset_index(drop=True)
-print(f"📊 Total partidos únicos: {len(df)}")
-
-COLS_REQUERIDAS = ['FTHG', 'FTAG', 'HTHG', 'HTAG', 'HST', 'AST', 'HC', 'AC']
-df = df.dropna(subset=COLS_REQUERIDAS).reset_index(drop=True)
-for col in COLS_REQUERIDAS:
-    df[col] = pd.to_numeric(df[col], errors='coerce')
-df = df.dropna(subset=COLS_REQUERIDAS).reset_index(drop=True)
-print(f"📊 Partidos con datos completos: {len(df)}")
-
-# ── Construir dataset de escenarios: un registro por cada equipo perdiendo al MT
-# Solo partidos con resultado claro al descanso (no empate en el MT)
-_perd = df[df['HTHG'] != df['HTAG']].copy()
-
-def _local_pierde(row):
-    return row['HTHG'] < row['HTAG']
-
-def _resultado_final(row):
-    if _local_pierde(row):
-        if row['FTHG'] > row['FTAG']: return 'Remontada (G)'
-        if row['FTHG'] == row['FTAG']: return 'Empate (E)'
-        return 'Derrota (P)'
-    else:
-        if row['FTAG'] > row['FTHG']: return 'Remontada (G)'
-        if row['FTAG'] == row['FTHG']: return 'Empate (E)'
-        return 'Derrota (P)'
-
-# Columnas desde la perspectiva del equipo que va perdiendo al MT
-_local_p = _perd['HTHG'] < _perd['HTAG']   # booleano: ¿es el local quien pierde?
-
-scenarios = pd.concat([
-    _perd,
-    _local_p.rename('Local_Pierde'),
-    _perd.apply(lambda r: r['HomeTeam'] if _local_pierde(r) else r['AwayTeam'], axis=1).rename('Equipo_Perd'),
-    _perd.apply(lambda r: r['HC']   if _local_pierde(r) else r['AC'],   axis=1).rename('Corners_Perd'),
-    _perd.apply(lambda r: r['AC']   if _local_pierde(r) else r['HC'],   axis=1).rename('Corners_Rival'),
-    _perd.apply(lambda r: r['HST']  if _local_pierde(r) else r['AST'],  axis=1).rename('Tiros_Perd'),
-    _perd.apply(lambda r: r['AST']  if _local_pierde(r) else r['HST'],  axis=1).rename('Tiros_Rival'),
-    _perd.apply(lambda r: r['FTHG'] if _local_pierde(r) else r['FTAG'], axis=1).rename('Goles_Perd'),
-    (_perd['HC'] + _perd['AC']).rename('Total_Corners'),
-    _perd.apply(_resultado_final, axis=1).rename('Resultado_Final'),
-], axis=1).copy()
+# Dataset completo para comparaciones (normal vs perdiendo)
+df = pd.read_csv('data/premier_limpio.csv', encoding='utf-8-sig')
+df['Total_Corners'] = df['HC'] + df['AC']
 
 LINEA_CORNERS = 9.5
-MIN_MUESTRAS  = 8    # mínimo de casos para veredicto confiable
+MIN_MUESTRAS  = 8
 
-# Equipos con suficientes casos en el escenario
 _casos = scenarios.groupby('Equipo_Perd').size()
 _equipos_validos = sorted(_casos[_casos >= MIN_MUESTRAS].index.tolist())
 
@@ -83,11 +26,7 @@ opciones_dropdown = [
     for e in _equipos_validos
 ]
 
-print(f"📊 Partidos con equipo perdiendo al MT: {len(scenarios)}")
-print(f"Equipos con >= {MIN_MUESTRAS} casos: {len(_equipos_validos)}")
-
-# Dataset global de todos los partidos para comparaciones (normal vs perdiendo)
-df['Total_Corners'] = df['HC'] + df['AC']
+print(f"✅ Datos cargados: {len(scenarios)} escenarios · {len(_equipos_validos)} equipos")
 
 # ─── 2. PALETA Y ESTILOS ──────────────────────────────────────────────────────
 VERDE_OSCURO = '#0d1f14'
